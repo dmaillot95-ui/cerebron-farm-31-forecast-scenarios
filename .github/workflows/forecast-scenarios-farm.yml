@@ -37,7 +37,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install -q gradio_client
+      - run: pip install -q hf-gradio
       - name: Run role
         env:
           ROLE: ${{ matrix.role }}
@@ -47,7 +47,7 @@ jobs:
         if: always()
         with:
           name: result-${{ matrix.role }}
-          path: results/*.json
+          path: results/${{ matrix.role }}.json
 
   omega:
     if: always()
@@ -61,15 +61,15 @@ jobs:
         run: |
           mkdir -p omega
           python - <<'PY'
-          import glob, json, os
+          import glob, json
           rows=[]
           for p in glob.glob('collected/**/*.json', recursive=True):
-              try:
-                  rows.append(json.load(open(p, encoding='utf-8')))
-              except Exception as e:
-                  rows.append({'path':p,'success':False,'error':repr(e)})
-          packet={'farm':'31-forecast-scenarios','count':len(rows),'results':rows}
+              try: rows.append(json.load(open(p, encoding='utf-8')))
+              except Exception as e: rows.append({'path':p,'inference_success':False,'error':repr(e)})
+          ok=sum(bool(r.get('inference_success')) for r in rows)
+          packet={'farm':'31-forecast-scenarios','roles_returned':len(rows),'successful_external_ai_calls':ok,'failed_external_ai_calls':len(rows)-ok,'model_families':sorted(set(r.get('model','') for r in rows if r.get('model'))),'status':'UNREVIEWED_EXTERNAL_AGENT_OUTPUT','results':rows}
           json.dump(packet, open('omega/packet.json','w',encoding='utf-8'), ensure_ascii=False, indent=2)
+          print(json.dumps({k:packet[k] for k in ('roles_returned','successful_external_ai_calls','failed_external_ai_calls','model_families','status')}))
           PY
       - uses: actions/upload-artifact@v4
         with:
