@@ -1,0 +1,77 @@
+name: CEREBRON Farm 31 Forecast Scenarios
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  workers:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {role: FORECAST_ARCHITECT, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: TIME_SERIES_SPECIALIST, model: huggingface-projects/gemma-2-9b-it}
+          - {role: PROBABILISTIC_FORECASTER, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: SCENARIO_PLANNER, model: huggingface-projects/gemma-2-9b-it}
+          - {role: BASE_RATE_ANALYST, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: CAUSAL_DRIVER_ANALYST, model: huggingface-projects/gemma-2-9b-it}
+          - {role: REGIME_SHIFT_SPECIALIST, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: MONTE_CARLO_SPECIALIST, model: huggingface-projects/gemma-2-9b-it}
+          - {role: ENSEMBLE_FORECAST_SPECIALIST, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: CALIBRATION_SPECIALIST, model: huggingface-projects/gemma-2-9b-it}
+          - {role: BACKTEST_AUDITOR, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: SENSITIVITY_ANALYST, model: huggingface-projects/gemma-2-9b-it}
+          - {role: STRESS_TEST_SPECIALIST, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: EARLY_WARNING_INDICATOR_SPECIALIST, model: huggingface-projects/gemma-2-9b-it}
+          - {role: UNCERTAINTY_DECOMPOSITION_AUDITOR, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: DECISION_THRESHOLD_ANALYST, model: huggingface-projects/gemma-2-9b-it}
+          - {role: CONTRADICTION_ANALYST, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: RED_TEAM_FALSIFIER, model: huggingface-projects/gemma-2-9b-it}
+          - {role: INDEPENDENT_REPLICATOR, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: OMEGA_FORECAST_SCENARIOS_JUDGE, model: huggingface-projects/gemma-2-9b-it}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -q gradio_client
+      - name: Run role
+        env:
+          ROLE: ${{ matrix.role }}
+          MODEL: ${{ matrix.model }}
+        run: python worker/agent.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: result-${{ matrix.role }}
+          path: results/*.json
+
+  omega:
+    if: always()
+    needs: workers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: collected
+      - name: Build Omega packet
+        run: |
+          mkdir -p omega
+          python - <<'PY'
+          import glob, json, os
+          rows=[]
+          for p in glob.glob('collected/**/*.json', recursive=True):
+              try:
+                  rows.append(json.load(open(p, encoding='utf-8')))
+              except Exception as e:
+                  rows.append({'path':p,'success':False,'error':repr(e)})
+          packet={'farm':'31-forecast-scenarios','count':len(rows),'results':rows}
+          json.dump(packet, open('omega/packet.json','w',encoding='utf-8'), ensure_ascii=False, indent=2)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: omega-packet
+          path: omega/packet.json
